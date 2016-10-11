@@ -18,14 +18,15 @@
  */
 package org.apache.pirk.responder.wideskies.standalone;
 
+import java.io.IOException;
+
 import org.apache.pirk.query.wideskies.Query;
 import org.apache.pirk.responder.wideskies.spi.ResponderPlugin;
 import org.apache.pirk.serialization.LocalFileSystemStore;
+import org.apache.pirk.utils.PIRException;
 import org.apache.pirk.utils.SystemConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
 
 /**
  * Class to launch stand alone responder
@@ -41,7 +42,7 @@ public class StandaloneResponder implements ResponderPlugin
   }
 
   @Override
-  public void run()
+  public void run() throws PIRException
   {
     logger.info("Launching Standalone Responder:");
     String queryInput = SystemConfiguration.getProperty("pir.queryInput");

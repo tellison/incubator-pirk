@@ -26,7 +26,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeMap;
 
-import org.apache.pirk.encryption.ModPowAbstraction;
+import org.apache.pirk.cache.ExponentTable;
+import org.apache.pirk.cache.PassThruTable;
+import org.apache.pirk.cache.SimpleExponentCache;
 import org.apache.pirk.query.wideskies.Query;
 import org.apache.pirk.query.wideskies.QueryInfo;
 import org.apache.pirk.query.wideskies.QueryUtils;
@@ -35,9 +37,11 @@ import org.apache.pirk.schema.query.QuerySchema;
 import org.apache.pirk.schema.query.QuerySchemaRegistry;
 import org.apache.pirk.serialization.LocalFileSystemStore;
 import org.apache.pirk.utils.KeyedHash;
+import org.apache.pirk.utils.PIRException;
 import org.apache.pirk.utils.SystemConfiguration;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,6 +65,9 @@ public class Responder
   private QuerySchema qSchema = null;
 
   private Response response = null;
+  
+  // lookup table for exponentiation of query vectors
+  private ExponentTable expTable = new PassThruTable();
 
   private TreeMap<Integer,BigInteger> columns = null; // the column values for the PIR calculations
 
@@ -92,6 +99,14 @@ public class Responder
     {
       rowColumnCounters.add(0);
     }
+    
+    if (queryInfo.useExpLookupTable())
+    {
+      logger.info("Starting expTable generation");
+      expTable = new SimpleExponentCache();
+      int maxValue = (1 << queryInfo.getDataPartitionBitSize()) - 1; // 2^partitionBitSize - 1
+      expTable.populate(query.getQueryElements().values(), maxValue, query.getNSquared());
+    }
   }
 
   public Response getResponse()
@@ -109,30 +124,40 @@ public class Responder
    * <p>
    * Assumes that the input data is a single file in the local filesystem and is fully qualified
    */
-  public void computeStandaloneResponse() throws IOException
+  public void computeStandaloneResponse() throws IOException, PIRException
   {
+    // Fill exponent cache
+    if (queryInfo.useExpLookupTable())
+    {
+      logger.info("Starting expTable generation");
+      expTable = new SimpleExponentCache();
+      int maxValue = (1 << queryInfo.getDataPartitionBitSize()) - 1; // 2^partitionBitSize - 1
+      expTable.populate(query.getQueryElements().values(), maxValue, query.getNSquared());
+    }
+
     // Read in data, perform query
     String inputData = SystemConfiguration.getProperty("pir.inputData");
-    try
+    try (BufferedReader br = new BufferedReader(new FileReader(inputData)))
     {
-      BufferedReader br = new BufferedReader(new FileReader(inputData));
-
       String line;
       JSONParser jsonParser = new JSONParser();
       while ((line = br.readLine()) != null)
       {
         logger.info("line = " + line);
-        JSONObject jsonData = (JSONObject) jsonParser.parse(line);
+        JSONObject jsonData;
+        try
+        {
+          jsonData = (JSONObject) jsonParser.parse(line);
+        } catch (ParseException e)
+        {
+          throw new PIRException("Invalid JSON data " + line);
+        }
 
         logger.info("jsonData = " + jsonData.toJSONString());
 
         String selector = QueryUtils.getSelectorByQueryTypeJSON(qSchema, jsonData);
         addDataElement(selector, jsonData);
       }
-      br.close();
-    } catch (Exception e)
-    {
-      e.printStackTrace();
     }
 
     // Set the response object, extract, write to file
@@ -165,7 +190,7 @@ public class Responder
    * Y_{i+c_{H_k(T)}} = (Y_{i+c_{H_k(T)}} * ((E_T)^{D_i} mod N^2)) mod N^2 ++c_{H_k(T)}
    * 
    */
-  public void addDataElement(String selector, JSONObject jsonData) throws Exception
+  public void addDataElement(String selector, JSONObject jsonData) throws PIRException
   {
     // Extract the data bits based on the query type
     // Partition by the given partitionSize
@@ -189,18 +214,7 @@ public class Responder
       BigInteger column = columns.get(i + rowCounter); // the next 'free' column relative to the selector
       logger.debug("Before: columns.get(" + (i + rowCounter) + ") = " + columns.get(i + rowCounter));
 
-      BigInteger exp;
-      if (query.getQueryInfo().useExpLookupTable() && !query.getQueryInfo().useHDFSExpLookupTable()) // using the standalone
-      // lookup table
-      {
-        exp = query.getExp(rowQuery, hitValPartitions.get(i).intValue());
-      }
-      else
-      // without lookup table
-      {
-        logger.debug("i = " + i + " hitValPartitions.get(i).intValue() = " + hitValPartitions.get(i).intValue());
-        exp = ModPowAbstraction.modPow(rowQuery, hitValPartitions.get(i), query.getNSquared());
-      }
+      BigInteger exp = expTable.getExp(rowQuery, hitValPartitions.get(i).intValue(), query.getNSquared());
       column = (column.multiply(exp)).mod(query.getNSquared());
 
       columns.put(i + rowCounter, column);
@@ -220,11 +234,6 @@ public class Responder
   public void setResponseElements()
   {
     logger.debug("numResponseElements = " + columns.size());
-    // for(int key: columns.keySet())
-    // {
-    // logger.debug("key = " + key + " column = " + columns.get(key));
-    // }
-
     response.setResponseElements(columns);
   }
 }

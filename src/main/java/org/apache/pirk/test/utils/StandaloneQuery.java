@@ -105,13 +105,7 @@ public class StandaloneQuery
     {
       String selector = QueryUtils.getSelectorByQueryTypeJSON(qSchema, jsonData);
       logger.info("selector = " + selector + " numDataElements = " + jsonData.size());
-      try
-      {
-        pirResponder.addDataElement(selector, jsonData);
-      } catch (Exception e)
-      {
-        fail(e.toString());
-      }
+      pirResponder.addDataElement(selector, jsonData);
     }
     logger.info("Completed the PIR Query and construction of the response elements:");
 

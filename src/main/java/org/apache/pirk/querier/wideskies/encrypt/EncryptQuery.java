@@ -144,14 +144,6 @@ public class EncryptQuery
 
     Query query = new Query(queryInfo, paillier.getN(), queryElements);
 
-    // Generate the expTable in Query, if we are using it and if
-    // useHDFSExpLookupTable is false -- if we are generating it as standalone and not on the cluster
-    if (queryInfo.useExpLookupTable() && !queryInfo.useHDFSExpLookupTable())
-    {
-      logger.info("Starting expTable generation");
-      query.generateExpTable();
-    }
-
     // Return the Querier object.
     return new Querier(selectors, paillier, query, embedSelectorMap);
   }

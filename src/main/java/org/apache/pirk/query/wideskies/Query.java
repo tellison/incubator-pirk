@@ -18,25 +18,22 @@
  */
 package org.apache.pirk.query.wideskies;
 
-import java.io.Serializable;
 import java.math.BigInteger;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.SortedMap;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Consumer;
 
-import com.google.gson.annotations.Expose;
-import org.apache.pirk.encryption.ModPowAbstraction;
 import org.apache.pirk.serialization.Storable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.gson.annotations.Expose;
 
 /**
  * Class to hold the PIR query vectors
  */
 
-public class Query implements Serializable, Storable
+public class Query implements Storable
 {
   public static final long querySerialVersionUID = 1L;
 
@@ -48,10 +45,6 @@ public class Query implements Serializable, Storable
   @Expose private final QueryInfo queryInfo; // holds all query info
 
   @Expose private final SortedMap<Integer,BigInteger> queryElements; // query elements - ordered on insertion
-
-  // lookup table for exponentiation of query vectors - based on dataPartitionBitSize
-  // element -> <power, element^power mod N^2>
-  private Map<BigInteger,Map<Integer,BigInteger>> expTable = new ConcurrentHashMap<>();
 
   // File based lookup table for modular exponentiation
   // element hash -> filename containing it's <power, element^power mod N^2> modular exponentiations
@@ -112,35 +105,5 @@ public class Query implements Serializable, Storable
   public void setExpFileBasedLookup(Map<Integer,String> expInput)
   {
     expFileBasedLookup = expInput;
-  }
-
-  /**
-   * This should be called after all query elements have been added in order to generate the expTable. For int exponentiation with BigIntegers, assumes that
-   * dataPartitionBitSize < 32.
-   */
-  public void generateExpTable()
-  {
-    int maxValue = (1 << queryInfo.getDataPartitionBitSize()) - 1; // 2^partitionBitSize - 1
-
-    queryElements.values().parallelStream().forEach(new Consumer<BigInteger>()
-    {
-      @Override public void accept(BigInteger element)
-      {
-        Map<Integer,BigInteger> powMap = new HashMap<>(maxValue); // <power, element^power mod N^2>
-        for (int i = 0; i <= maxValue; ++i)
-        {
-          BigInteger value = ModPowAbstraction.modPow(element, BigInteger.valueOf(i), NSquared);
-          powMap.put(i, value);
-        }
-        expTable.put(element, powMap);
-      }
-    });
-    logger.debug("expTable.size() = " + expTable.keySet().size() + " NSquared = " + NSquared.intValue() + " = " + NSquared.toString());
-  }
-
-  public BigInteger getExp(BigInteger value, int power)
-  {
-    Map<Integer,BigInteger> powerMap = expTable.get(value);
-    return (powerMap == null) ? null : powerMap.get(power);
   }
 }
