@@ -38,4 +38,11 @@ public abstract class ExponentTable
   public void populate(Collection<BigInteger> values, int maxPower, BigInteger modulus) {
     // Optional
   }
+  
+  /**
+   * Stores a new value in the cache.
+   */
+  public void putExp(BigInteger value, int power, BigInteger modulus, BigInteger result) {
+    // Optional
+  }
 }

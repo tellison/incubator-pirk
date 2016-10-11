@@ -126,15 +126,6 @@ public class Responder
    */
   public void computeStandaloneResponse() throws IOException, PIRException
   {
-    // Fill exponent cache
-    if (queryInfo.useExpLookupTable())
-    {
-      logger.info("Starting expTable generation");
-      expTable = new SimpleExponentCache();
-      int maxValue = (1 << queryInfo.getDataPartitionBitSize()) - 1; // 2^partitionBitSize - 1
-      expTable.populate(query.getQueryElements().values(), maxValue, query.getNSquared());
-    }
-
     // Read in data, perform query
     String inputData = SystemConfiguration.getProperty("pir.inputData");
     try (BufferedReader br = new BufferedReader(new FileReader(inputData)))

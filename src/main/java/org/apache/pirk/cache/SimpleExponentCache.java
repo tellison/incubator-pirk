@@ -50,7 +50,7 @@ public class SimpleExponentCache extends ExponentTable
   public BigInteger getExp(BigInteger value, int power, BigInteger modulus)
   {
     BigInteger cachedValue = null;
-    if (cachedModulus.equals(modulus))
+    if (checkModulus(modulus))
     {
       Map<Integer,BigInteger> powerMap = expTable.get(value);
       cachedValue = (powerMap == null) ? null : powerMap.get(power);
@@ -63,6 +63,21 @@ public class SimpleExponentCache extends ExponentTable
     }
 
     return (cachedValue == null) ? super.getExp(value, power, modulus) : cachedValue;
+  }
+
+  @Override
+  public void putExp(BigInteger value, int power, BigInteger modulus, BigInteger result)
+  {
+    if (checkModulus(modulus))
+    {
+      Map<Integer,BigInteger> powMap = expTable.get(value);
+      if (powMap == null)
+      {
+        powMap = new HashMap<Integer,BigInteger>();
+        expTable.put(value, powMap);
+      }
+      powMap.put(power, result);
+    }
   }
 
   @Override
@@ -86,5 +101,13 @@ public class SimpleExponentCache extends ExponentTable
         expTable.put(element, powMap);
       }
     });
+  }
+
+  /*
+   * Returns true if the cache is remembering this modulus, else false.
+   */
+  private boolean checkModulus(BigInteger modulus)
+  {
+    return (cachedModulus == null) || (cachedModulus.equals(modulus));
   }
 }

@@ -25,10 +25,10 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.pirk.cache.ExponentTable;
 import org.apache.pirk.encryption.ModPowAbstraction;
 import org.apache.pirk.inputformat.hadoop.BytesArrayWritable;
 import org.apache.pirk.query.wideskies.Query;
@@ -36,11 +36,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import scala.Tuple2;
-import scala.Tuple3;
-
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
 
 /**
  * Class to compute the encrypted row elements for a query from extracted data partitions
@@ -51,16 +46,7 @@ public class ComputeEncryptedRow
 
   // Input: base, exponent, NSquared
   // <<base,exponent,NSquared>, base^exponent mod N^2>
-  private static LoadingCache<Tuple3<BigInteger,BigInteger,BigInteger>,BigInteger> expCache = CacheBuilder.newBuilder().maximumSize(10000)
-      .build(new CacheLoader<Tuple3<BigInteger,BigInteger,BigInteger>,BigInteger>()
-      {
-        @Override
-        public BigInteger load(Tuple3<BigInteger,BigInteger,BigInteger> info) throws Exception
-        {
-          logger.debug("cache miss");
-          return ModPowAbstraction.modPow(info._1(), info._2(), info._3());
-        }
-      });
+  private static ExponentTable expCache = new GuavaExponentTable();
 
   /**
    * Populate the cache based on the pre-generated exp table in hdfs
@@ -79,12 +65,10 @@ public class ComputeEncryptedRow
         BigInteger base = query.getQueryElement(Integer.parseInt(rowValTokens[0]));
 
         String[] expMod = rowValTokens[1].split("-");
-        BigInteger exponent = new BigInteger(expMod[0]);
+        int exponent = Integer.parseInt(expMod[0]);
         BigInteger value = new BigInteger(expMod[1]);
 
-        // Cache: <<base,exponent,NSquared>, base^exponent mod N^2>
-        Tuple3<BigInteger,BigInteger,BigInteger> key = new Tuple3<>(base, exponent, query.getNSquared());
-        expCache.put(key, value);
+        expCache.putExp(base, exponent, query.getNSquared(), value);
       }
     }
   }
@@ -126,20 +110,16 @@ public class ComputeEncryptedRow
       {
         BigInteger part = dataPartitions.getBigInteger(i);
         BigInteger exp = null;
-        try
+
+        if (useCache)
         {
-          if (useCache)
-          {
-            exp = expCache.get(new Tuple3<>(rowQuery, part, query.getNSquared()));
-          }
-          else
-          {
-            exp = ModPowAbstraction.modPow(rowQuery, part, query.getNSquared());
-          }
-        } catch (ExecutionException e)
-        {
-          e.printStackTrace();
+          exp = expCache.getExp(rowQuery, part.intValue(), query.getNSquared());
         }
+        else
+        {
+          exp = ModPowAbstraction.modPow(rowQuery, part, query.getNSquared());
+        }
+
         logger.debug("rowIndex = {} colCounter = {} part = {} part binary = {} exp = {} i = {} partition = {} = {}", rowIndex, colCounter, part.toString(),
             part.toString(2), exp, i, dataPartitions.getBigInteger(i), dataPartitions.getBigInteger(i).toString(2));
 
@@ -191,19 +171,14 @@ public class ComputeEncryptedRow
       {
         BigInteger part = dataPartitions.get(i);
         BigInteger exp = null;
-        try
+
+        if (useCache)
         {
-          if (useCache)
-          {
-            exp = expCache.get(new Tuple3<>(rowQuery, part, query.getNSquared()));
-          }
-          else
-          {
-            exp = ModPowAbstraction.modPow(rowQuery, part, query.getNSquared());
-          }
-        } catch (ExecutionException e)
+          exp = expCache.getExp(rowQuery, part.intValue(), query.getNSquared());
+        }
+        else
         {
-          e.printStackTrace();
+          exp = ModPowAbstraction.modPow(rowQuery, part, query.getNSquared());
         }
 
         logger.debug("rowIndex = {} colCounter = {} part = {} part binary = {} exp = {} i = {}", rowIndex, colCounter, part.toString(), part.toString(2), exp,
@@ -296,15 +271,7 @@ public class ComputeEncryptedRow
     for (int i = 0; i < dataPartitions.size(); ++i)
     {
       BigInteger part = dataPartitions.getBigInteger(i);
-
-      BigInteger exp = null;
-      try
-      {
-        exp = expCache.get(new Tuple3<>(rowQuery, part, query.getNSquared()));
-      } catch (ExecutionException e)
-      {
-        e.printStackTrace();
-      }
+      BigInteger exp = expCache.getExp(rowQuery, part.intValue(), query.getNSquared());
 
       logger.debug("rowIndex = {} colCounter = {} part = {} part binary = {} exp = {} i = {} partition = {} = {}", rowIndex, colCounter, part.toString(),
           part.toString(2), exp, i, dataPartitions.getBigInteger(i), dataPartitions.getBigInteger(i).toString(2));
@@ -344,16 +311,7 @@ public class ComputeEncryptedRow
     for (int i = 0; i < dataPartitions.size(); ++i)
     {
       BigInteger part = dataPartitions.get(i);
-
-      BigInteger exp;
-      try
-      {
-        exp = expCache.get(new Tuple3<>(rowQuery, part, query.getNSquared()));
-      } catch (ExecutionException e)
-      {
-        e.printStackTrace();
-        break;
-      }
+      BigInteger exp = expCache.getExp(rowQuery, part.intValue(), query.getNSquared());
 
       logger.debug("rowIndex = {} colCounter = {} part = {} part binary = {} exp = {} i = {} partition = {} = {}", rowIndex, colCounter, part.toString(),
           part.toString(2), exp, i, dataPartitions.get(i), dataPartitions.get(i).toString(2));
@@ -373,22 +331,10 @@ public class ComputeEncryptedRow
     // Pull the corresponding encrypted row query
     BigInteger rowQuery = query.getQueryElement(rowIndex);
 
-    // Initialize the column counter
-    long colCounter = colIndex;
-
     // Update the associated column values
-    BigInteger exp = null;
-    try
-    {
-      exp = expCache.get(new Tuple3<>(rowQuery, part, query.getNSquared()));
-    } catch (ExecutionException e)
-    {
-      e.printStackTrace();
-    }
+    BigInteger exp = expCache.getExp(rowQuery, part.intValue(), query.getNSquared());
 
-    returnPairs.add(new Tuple2<>(colCounter, exp));
-
-    ++colCounter;
+    returnPairs.add(new Tuple2<>((long)colIndex, exp));
 
     return returnPairs;
   }

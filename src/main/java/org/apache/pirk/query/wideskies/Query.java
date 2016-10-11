@@ -24,23 +24,18 @@ import java.util.Map;
 import java.util.SortedMap;
 
 import org.apache.pirk.serialization.Storable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.gson.annotations.Expose;
 
 /**
  * Class to hold the PIR query vectors
  */
-
 public class Query implements Storable
 {
   public static final long querySerialVersionUID = 1L;
 
   // So that we can serialize the version number in gson.
   @Expose public final long queryVersion = querySerialVersionUID;
-
-  private static final Logger logger = LoggerFactory.getLogger(Query.class);
 
   @Expose private final QueryInfo queryInfo; // holds all query info
 
