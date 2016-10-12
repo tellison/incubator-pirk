@@ -19,9 +19,9 @@
 package org.apache.pirk.cache;
 
 // Calculates the value on every request.
-public final class PassThruTable extends ExponentTable
+public final class PassThruExponentTable extends ExponentTable
 {
-  public PassThruTable()
+  public PassThruExponentTable()
   {
     // Does nothing
   }

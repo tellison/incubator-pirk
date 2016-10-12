@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.TreeMap;
 
 import org.apache.pirk.cache.ExponentTable;
-import org.apache.pirk.cache.PassThruTable;
+import org.apache.pirk.cache.PassThruExponentTable;
 import org.apache.pirk.cache.SimpleExponentCache;
 import org.apache.pirk.query.wideskies.Query;
 import org.apache.pirk.query.wideskies.QueryInfo;
@@ -46,28 +46,28 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Class to perform stand alone responder functionalities
+ * Class to perform stand alone responder functionalities.
  * <p>
- * Used primarily for testing, although it can be used anywhere in standalone mode
+ * Used primarily for testing, although it can be used anywhere in standalone mode.
  * <p>
- * Does not bound the number of hits that can be returned per selector
+ * Does not bound the number of hits that can be returned per selector.
  * <p>
- * Does not use the DataFilter class -- assumes all filtering happens before calling addDataElement()
+ * Does not use the DataFilter class -- assumes all filtering happens before calling addDataElement().
  * <p>
- * NOTE: Only uses in expLookupTables that are contained in the Query object, not in hdfs as this is a standalone responder
+ * NOTE: Only uses in memory exponent lookup tables, not those in hdfs as this is a standalone responder.
  */
 public class Responder
 {
   private static final Logger logger = LoggerFactory.getLogger(Responder.class);
 
-  private Query query = null;
-  private QueryInfo queryInfo = null;
+  private final Query query;
+  private final QueryInfo queryInfo;
   private QuerySchema qSchema = null;
 
   private Response response = null;
   
   // lookup table for exponentiation of query vectors
-  private ExponentTable expTable = new PassThruTable();
+  private ExponentTable expTable = new PassThruExponentTable();
 
   private TreeMap<Integer,BigInteger> columns = null; // the column values for the PIR calculations
 
@@ -77,15 +77,14 @@ public class Responder
   {
     query = queryInput;
     queryInfo = query.getQueryInfo();
-    String queryType = queryInfo.getQueryType();
-
+    
     if (SystemConfiguration.getBooleanProperty("pir.allowAdHocQuerySchemas", false))
     {
       qSchema = queryInfo.getQuerySchema();
     }
     if (qSchema == null)
     {
-      qSchema = QuerySchemaRegistry.get(queryType);
+      qSchema = QuerySchemaRegistry.get(queryInfo.getQueryType());
     }
 
     response = new Response(queryInfo);
@@ -95,11 +94,12 @@ public class Responder
 
     // Initialize row counters
     rowColumnCounters = new ArrayList<>();
-    for (int i = 0; i < Math.pow(2, queryInfo.getHashBitSize()); ++i)
+    for (int i = 0; i < (1 << queryInfo.getHashBitSize()); i++) // 2^hashBitSize
     {
       rowColumnCounters.add(0);
     }
-    
+
+    // Populate cached values for exponents.
     if (queryInfo.useExpLookupTable())
     {
       logger.info("Starting expTable generation");
@@ -200,7 +200,7 @@ public class Responder
     {
       if (!columns.containsKey(i + rowCounter))
       {
-        columns.put(i + rowCounter, BigInteger.valueOf(1));
+        columns.put(i + rowCounter, BigInteger.ONE);
       }
       BigInteger column = columns.get(i + rowCounter); // the next 'free' column relative to the selector
       logger.debug("Before: columns.get(" + (i + rowCounter) + ") = " + columns.get(i + rowCounter));

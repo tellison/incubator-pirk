@@ -28,34 +28,65 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
-
-import scala.Tuple3;;
+import com.google.common.cache.LoadingCache;;
 
 public class GuavaExponentTable extends ExponentTable
 {
   private static final Logger logger = LoggerFactory.getLogger(GuavaExponentTable.class);
 
-  private LoadingCache<Tuple3<BigInteger,BigInteger,BigInteger>,BigInteger> cache;
+  private static class Key
+  {
+    final BigInteger value;
+    final int power;
+    final BigInteger modulus;
+
+    Key(BigInteger value, int power, BigInteger modulus)
+    {
+      this.value = value;
+      this.power = power;
+      this.modulus = modulus;
+    }
+
+    @Override
+    public boolean equals(Object other)
+    {
+      if (other == null || !(other instanceof Key))
+      {
+        return false;
+      }
+      Key otherKey = (Key) other;
+      return (power == otherKey.power) && (value.equals(otherKey.value)) && (modulus.equals(otherKey.modulus));
+    }
+
+    @Override
+    public int hashCode()
+    {
+      return value.hashCode() | power | modulus.hashCode();
+    }
+  }
+
+  // Cache: <<base,exponent,NSquared>, base^exponent mod N^2>
+  private LoadingCache<Key,BigInteger> cache;
 
   public GuavaExponentTable()
   {
-    cache = CacheBuilder.newBuilder().maximumSize(10000).build(new CacheLoader<Tuple3<BigInteger,BigInteger,BigInteger>,BigInteger>()
+    cache = CacheBuilder.newBuilder().maximumSize(10000).build(new CacheLoader<Key,BigInteger>()
     {
       @Override
-      public BigInteger load(Tuple3<BigInteger,BigInteger,BigInteger> info) throws Exception
+      public BigInteger load(Key info) throws Exception
       {
         logger.debug("cache miss");
-        return ModPowAbstraction.modPow(info._1(), info._2(), info._3());
+        return ModPowAbstraction.modPow(info.value, BigInteger.valueOf(info.power), info.modulus);
       }
     });
   }
 
   @Override
-  public BigInteger getExp(BigInteger value, int power, BigInteger modulus) {
+  public BigInteger getExp(BigInteger value, int power, BigInteger modulus)
+  {
     try
     {
-      return cache.get(new Tuple3<>(value, BigInteger.valueOf(power), modulus));
+      return cache.get(new Key(value, power, modulus));
     } catch (ExecutionException e)
     {
       // Problem computing the value using ModPowAbstration.
@@ -66,8 +97,6 @@ public class GuavaExponentTable extends ExponentTable
   @Override
   public void putExp(BigInteger value, int power, BigInteger modulus, BigInteger result)
   {
-    // Cache: <<base,exponent,NSquared>, base^exponent mod N^2>
-    Tuple3<BigInteger,BigInteger,BigInteger> key = new Tuple3<>(value, BigInteger.valueOf(power), modulus);
-    cache.put(key, result);
+    cache.put(new Key(value, power, modulus), result);
   }
 }

@@ -56,11 +56,7 @@ public class SimpleExponentCache extends ExponentTable
       cachedValue = (powerMap == null) ? null : powerMap.get(power);
     }
 
-    if (logger.isDebugEnabled())
-    {
-      String strResult = (cachedValue == null) ? "null" : cachedValue.toString(2);
-      logger.debug("Cached result for value {}, pow {}, modulus {}, result {}", value.toString(2), power, modulus.toString(2), strResult);
-    }
+    logger.debug("Cached result for value {}, pow {}, modulus {}, result {}", value, power, modulus, cachedValue);
 
     return (cachedValue == null) ? super.getExp(value, power, modulus) : cachedValue;
   }
@@ -83,7 +79,7 @@ public class SimpleExponentCache extends ExponentTable
   @Override
   public void populate(Collection<BigInteger> values, int maxPower, BigInteger modulus)
   {
-    logger.info("Populating cache for {} values, maxPower {}, modulus {}", values.size(), maxPower, modulus.toString(2));
+    logger.info("Populating cache for {} values, maxPower {}, modulus {}", values.size(), maxPower, modulus);
 
     cachedModulus = modulus;
 
