@@ -80,9 +80,11 @@ public class EncryptQuery
   /**
    * Encrypts the query described by the query information using Paillier encryption.
    * <p>
-   * The encryption builds a <code>Querier</code> object, calculating and setting the query vectors.
+   * The encryption builds a {@code Querier} object, calculating and setting the query vectors.
    * <p>
    * Uses the system configured number of threads to conduct the encryption, or a single thread if the configuration has not been set.
+   * <p>
+   * Note that the act of encrypting a {@code QueryInfo} may modify its hash key as returned by {@link QueryInfo#getHashKey()}.
    *
    * @return The querier containing the query, and all information required to perform decryption.
    * @throws InterruptedException If the task was interrupted during encryption.
@@ -99,7 +101,8 @@ public class EncryptQuery
    * <p>
    * The encryption builds a <code>Querier</code> object, calculating and setting the query vectors.
    * <p>
-   * If we have hash collisions over our selector set, we will append integers to the key starting with 0 until we no longer have collisions.
+   * If we have hash collisions over our selector set a new query hash key is generated until we no longer have collisions.
+   * Therefore the encryption operation may modify the hash key returned by {@link QueryInfo#getHashKey()}.
    * <p>
    * For encrypted query vector E = <E_0, ..., E_{(2^hashBitSize)-1}>:
    * <p>
