@@ -20,8 +20,11 @@
 package org.apache.pirk.query.wideskies;
 
 import com.google.gson.annotations.Expose;
+
+import org.apache.commons.codec.binary.Hex;
 import org.apache.pirk.schema.query.QuerySchema;
 import org.apache.pirk.schema.query.QuerySchemaRegistry;
+import org.apache.pirk.utils.RandomProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,6 +45,9 @@ public class QueryInfo implements Serializable, Cloneable
 
   public static final long queryInfoSerialVersionUID = 1L;
 
+  // The number of bytes to use for the random hashKey.
+  private static final int HASH_KEY_LENGTH = 10;
+
   // So that we can serialize the version number in gson.
   @Expose
   public final long queryInfoVersion = queryInfoSerialVersionUID;
@@ -61,7 +67,8 @@ public class QueryInfo implements Serializable, Cloneable
   private int hashBitSize = 0; // Bit size of the keyed hash function
 
   @Expose
-  private String hashKey; // Key for the keyed hash function
+  private String hashKey = regenerateHashKey(); // Key for the keyed hash function
+  //TODO: Should this now be a byte[]?
 
   @Expose
   private int numBitsPerDataElement = 0; // total num bits per returned data value - defined relative to query type
@@ -122,7 +129,7 @@ public class QueryInfo implements Serializable, Cloneable
    * This constructor is used for deserialization only. The Hash Key should not be set manually in most cases because EncryptQuery
    * will overwrite it with a new random one.
    */
-  public QueryInfo(UUID identifierInput, int numSelectorsInput, int hashBitSizeInput, String hashKeyInput, int dataPartitionBitSizeInput, String queryTypeInput,
+  QueryInfo(UUID identifierInput, int numSelectorsInput, int hashBitSizeInput, String hashKeyInput, int dataPartitionBitSizeInput, String queryTypeInput,
       boolean useExpLookupTableInput, boolean embedSelectorInput, boolean useHDFSExpLookupTableInput, int numBitsPerDataElementInput,
       QuerySchema querySchemaInput)
   {
@@ -203,8 +210,17 @@ public class QueryInfo implements Serializable, Cloneable
   {
     return hashKey;
   }
+  
+  public String regenerateHashKey()
+  {
+    byte[] randomData = new byte[HASH_KEY_LENGTH];
+    RandomProvider.SECURE_RANDOM.nextBytes(randomData);
+    String newKey = Hex.encodeHexString(randomData);
+    hashKey = newKey;
+    return newKey;
+  }
 
-  public void setHashKey(String hashKey)
+  void setHashKey(String hashKey)
   {
     this.hashKey = hashKey;
   }
